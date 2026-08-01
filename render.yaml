@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: alpha-data
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ALPHA_SUPABASE_URL
+        value: "https://bvggujwxalckfrrzjbwg.supabase.co"
+      - key: ALPHA_SUPABASE_ANON_KEY
+        sync: false
