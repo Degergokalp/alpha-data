@@ -41,7 +41,7 @@ uvicorn api.main:app --reload  # http://localhost:8000/docs, MCP at /mcp
 MCP client registration (hosted):
 
 ```json
-{ "mcpServers": { "alpha-data": { "url": "https://alpha-data.onrender.com/mcp" } } }
+{ "mcpServers": { "alpha-data": { "url": "https://alpha-data-bgg3.onrender.com/mcp" } } }
 ```
 
 Deploy: Render blueprint in `render.yaml` (single web service = API + MCP).

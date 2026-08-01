@@ -6,7 +6,7 @@ API (ALPHA_API_URL). Two run modes:
 
 1. Hosted (recommended): mounted under /mcp on the API service (api/main.py) —
    streamable HTTP. Client registration:
-     { "alpha-data": { "url": "https://alpha-data.onrender.com/mcp" } }
+     { "alpha-data": { "url": "https://alpha-data-bgg3.onrender.com/mcp" } }
 2. Local stdio (Claude Desktop etc.):
      { "alpha-data": { "command": "python3",
                        "args": ["/path/to/alpha-data/mcp_server/server.py"] } }
@@ -20,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
-API_URL = os.environ.get("ALPHA_API_URL", "https://alpha-data.onrender.com").rstrip("/")
+API_URL = os.environ.get("ALPHA_API_URL", "https://alpha-data-bgg3.onrender.com").rstrip("/")
 
 
 def _ro(title: str) -> ToolAnnotations:
