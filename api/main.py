@@ -38,7 +38,7 @@ Machine-readable US market research for AI agents, from **Alphalyze**.
 - **Social**: Reddit alpha signal feed, narrative events, extracted market state.
 - **News**: curated market news with sentiment and impact tags.
 
-**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 12 tools over this API.
+**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 14 tools over this API.
 
 Free during beta, no API key. AI-generated research: may be wrong, not financial advice.
 """
@@ -182,6 +182,46 @@ async def market_momentum(limit: int = Query(20, ge=1, le=50)):
         "gainers": (data.get("gainers") or [])[:limit],
         "losers": (data.get("losers") or [])[:limit],
     }
+
+
+# ---------- AI stock signals + feed ----------
+
+@app.get("/v1/signals/stocks")
+async def stock_signals(
+    signal: str | None = Query(None, description="Filter: buy / sell / hold / watch"),
+    ticker: str | None = Query(None, description="Filter to one ticker"),
+):
+    """Per-ticker AI calls (buy/sell/hold/watch) with confidence, score and reasoning."""
+    hit = await store.latest_radar_stocks(_http())
+    if hit is None:
+        raise HTTPException(404, "no stock signals in the archive window")
+    date, data = hit
+    stocks = data.get("stocks", []) if isinstance(data, dict) else []
+    if signal:
+        s = signal.lower()
+        stocks = [x for x in stocks if str(x.get("signal", "")).lower() == s]
+    if ticker:
+        t = ticker.upper()
+        stocks = [x for x in stocks if str(x.get("symbol", "")).upper() == t]
+        if not stocks:
+            raise HTTPException(404, f"no signal for {t}")
+    return {
+        "date": date,
+        "generated_at": data.get("generated_at") if isinstance(data, dict) else None,
+        "by_signal": data.get("by_signal") if isinstance(data, dict) else None,
+        "count": len(stocks),
+        "stocks": stocks,
+    }
+
+
+@app.get("/v1/feed/stock")
+async def stock_feed():
+    """Latest raw stock research feed items produced by the agent."""
+    hit = await store.latest_stock_feed(_http())
+    if hit is None:
+        raise HTTPException(404, "no stock feed in the archive window")
+    date, data = hit
+    return {"date": date, **(data if isinstance(data, dict) else {"data": data})}
 
 
 # ---------- social ----------

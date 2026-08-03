@@ -26,6 +26,14 @@ REPORT_TYPES = [
     "hood_stocks",
     "sector_rotation",
     "earnings_radar",
+    "stock",
+    "unified_stocks",
+    "ai_impacts",
+    "daily_pulse",
+    "crypto",
+    "forex",
+    "tree_report",
+    "sp_ndx_profit_zones",
 ]
 
 WIDGET_IDS = [
@@ -36,9 +44,31 @@ WIDGET_IDS = [
     "risk_reward_matrix",
     "options_strategy_cards",
     "catalyst_timeline",
+    "ai_disruption_map",
+    "ai_ecosystem_radar",
+    "ai_infra_funding",
+    "ai_insights",
+    "ai_regulation_tracker",
+    "commodity_dashboard",
+    "cross_report_alerts",
+    "crypto_pulse",
+    "dca_portfolios",
+    "earnings_calendar",
+    "event_calendar",
+    "macro_gauge",
+    "market_mood",
+    "risk_dashboard",
+    "sector_heatmap",
+    "stock_categories",
+    "top_picks",
+    "value_screener",
 ]
 
 # How many days back the "latest" resolution walks.
 MAX_LOOKBACK_DAYS = int(os.environ.get("ALPHA_MAX_LOOKBACK_DAYS", "14"))
+
+# Snapshot folder holding the full research archive (all reports + widgets).
+# "Latest" resolution falls back to this date when nothing newer exists.
+ARCHIVE_DATE = os.environ.get("ALPHA_ARCHIVE_DATE", "20_05_2026")
 
 CACHE_TTL_SEC = int(os.environ.get("ALPHA_CACHE_TTL_SEC", "300"))

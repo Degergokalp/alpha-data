@@ -80,10 +80,12 @@ async def list_report_dates() -> dict:
 
 @mcp.tool(annotations=_ro("Latest Report"))
 async def latest_report(type: str = "macro_overview") -> dict:
-    """Latest deep-research report of a type, full JSON. Types:
+    """Latest deep-research report of a type, full JSON. Active types:
     macro_overview (daily macro brief), nx_spy_bias (NDX/SPY index bias),
     hood_stocks (per-ticker research cards), sector_rotation (weekly),
-    earnings_radar (Monday)."""
+    earnings_radar (Monday). Archive types (served from the research
+    snapshot): stock, unified_stocks, ai_impacts, daily_pulse, crypto,
+    forex, tree_report, sp_ndx_profit_zones."""
     return await _get("/v1/reports/latest", {"type": type})
 
 
@@ -97,9 +99,12 @@ async def get_report(date: str, type: str) -> dict:
 @mcp.tool(annotations=_ro("Widget JSON"))
 async def get_widget(widget_id: str, date: Optional[str] = None) -> dict:
     """Any widget JSON by id, latest by default or for a specific date
-    (DD_MM_YYYY). Ids: sector_rotation_live, momentum_screener,
+    (DD_MM_YYYY). Live ids: sector_rotation_live, momentum_screener,
     options_flow_heatmap, options_analytics, risk_reward_matrix,
-    options_strategy_cards, catalyst_timeline."""
+    options_strategy_cards, catalyst_timeline. Archive ids include:
+    earnings_calendar, market_mood, macro_gauge, sector_heatmap, top_picks,
+    stock_categories, value_screener, risk_dashboard, crypto_pulse,
+    commodity_dashboard, dca_portfolios, event_calendar."""
     if date:
         return await _get(f"/v1/widgets/{date}/{widget_id}")
     return await _get(f"/v1/widgets/{widget_id}")
@@ -169,6 +174,26 @@ async def news_feed(limit: int = 30) -> dict:
     """Curated market news feed with category, impact and bullish/bearish
     sentiment tags, newest first. limit max 200."""
     return await _get("/v1/news/feed", {"limit": min(limit, 200)})
+
+
+@mcp.tool(annotations=_ro("AI Stock Signals"))
+async def stock_signals(signal: Optional[str] = None, ticker: Optional[str] = None) -> dict:
+    """Per-ticker AI calls from the agent's cross-report research: signal
+    (buy/sell/hold/watch), confidence, 0-100 score and reasoning. Filter by
+    signal type or a single ticker, omit both for the full list."""
+    params: dict = {}
+    if signal:
+        params["signal"] = signal
+    if ticker:
+        params["ticker"] = ticker
+    return await _get("/v1/signals/stocks", params or None)
+
+
+@mcp.tool(annotations=_ro("Stock Research Feed"))
+async def stock_feed() -> dict:
+    """Latest raw stock research feed items produced by the agent (the
+    source material behind the AI stock signals)."""
+    return await _get("/v1/feed/stock")
 
 
 if __name__ == "__main__":

@@ -81,6 +81,9 @@ async def latest_report(
         data = await fetch_report(client, date, report_type)
         if data is not None:
             return date, data
+    data = await fetch_report(client, config.ARCHIVE_DATE, report_type)
+    if data is not None:
+        return config.ARCHIVE_DATE, data
     return None
 
 
@@ -91,6 +94,43 @@ async def latest_widget(
         data = await fetch_widget(client, date, widget_id)
         if data is not None:
             return date, data
+    data = await fetch_widget(client, config.ARCHIVE_DATE, widget_id)
+    if data is not None:
+        return config.ARCHIVE_DATE, data
+    return None
+
+
+async def fetch_radar_stocks(client: httpx.AsyncClient, date: str) -> Any | None:
+    return await _download_json(client, f"{date}/radar_stocks/stock.json")
+
+
+async def latest_radar_stocks(
+    client: httpx.AsyncClient, max_back: int = 7
+) -> tuple[str, Any] | None:
+    for date in recent_date_folders(max_back):
+        data = await fetch_radar_stocks(client, date)
+        if data and data.get("stocks"):
+            return date, data
+    data = await fetch_radar_stocks(client, config.ARCHIVE_DATE)
+    if data is not None:
+        return config.ARCHIVE_DATE, data
+    return None
+
+
+async def fetch_stock_feed(client: httpx.AsyncClient, date: str) -> Any | None:
+    return await _download_json(client, f"{date}/feed/stock/feed.json")
+
+
+async def latest_stock_feed(
+    client: httpx.AsyncClient, max_back: int = 7
+) -> tuple[str, Any] | None:
+    for date in recent_date_folders(max_back):
+        data = await fetch_stock_feed(client, date)
+        if data and data.get("feeds"):
+            return date, data
+    data = await fetch_stock_feed(client, config.ARCHIVE_DATE)
+    if data is not None:
+        return config.ARCHIVE_DATE, data
     return None
 
 
@@ -105,6 +145,9 @@ async def available_dates(client: httpx.AsyncClient, max_back: Optional[int] = N
             if await fetch_report(client, date, marker) is not None:
                 dates.append(date)
                 break
+    if config.ARCHIVE_DATE not in dates:
+        if await fetch_report(client, config.ARCHIVE_DATE, "macro_overview") is not None:
+            dates.append(config.ARCHIVE_DATE)
     _cache_put("dates", dates)
     return dates
 
