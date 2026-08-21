@@ -134,6 +134,16 @@ async def latest_stock_feed(
     return None
 
 
+async def fetch_research_index(client: httpx.AsyncClient) -> Any | None:
+    """Top-500 research cards manifest (stable path, refreshed daily)."""
+    return await _download_json(client, "research_cards/index.json")
+
+
+async def fetch_research_card(client: httpx.AsyncClient, ticker: str) -> Any | None:
+    """One bilingual top-500 research card by ticker (stable path)."""
+    return await _download_json(client, f"research_cards/{ticker.upper()}.json")
+
+
 async def available_dates(client: httpx.AsyncClient, max_back: Optional[int] = None) -> list[str]:
     """Dates (newest first) that have at least one known report."""
     cached = _cache_get("dates")

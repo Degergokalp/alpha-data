@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from alpha import config, store
+from alpha.i18n import localize, slice_report
 from mcp_server.server import bind_asgi_app, mcp as alpha_mcp
 
 
@@ -31,14 +32,24 @@ async def _lifespan(app: FastAPI):
 _DESCRIPTION = """
 Machine-readable US market research for AI agents, from **Alphalyze**.
 
+- **Daily brief**: one cross-report AI synthesis per day (regime, bullets,
+  opportunities, risks, today-watch) — widget id `daily_brief`.
+- **Research cards**: bilingual AI research cards for the top-500 US stocks by
+  market cap, refreshed daily (`/v1/research/stocks`, `ticker=` for one card).
 - **Reports**: daily deep-research reports (macro overview, NDX/SPY bias,
-  per-ticker stock cards, sector rotation, weekly earnings radar), archived by date.
-- **Widgets**: live structured snapshots — sector rotation regime, momentum
-  screener, options flow, IV-vs-RV analytics, risk/reward matrix.
+  sector rotation, crypto, global daily pulse, SPX/NDX profit zones, AI
+  impacts, metals compass, weekly earnings radar), archived by date; fetch a
+  single section with `?section=` ("toc" lists section keys first).
+- **Widgets**: live structured snapshots — daily analyst bulletin, sector
+  rotation regime, momentum screener, options flow, IV-vs-RV analytics,
+  metals dashboard, macro calendar, value screener, top picks, risk
+  dashboard, AI impact trackers, signal track record.
 - **Social**: Reddit alpha signal feed, narrative events, extracted market state.
 - **News**: curated market news with sentiment and impact tags.
+- **Language**: research text is Turkish-first with English translations; pass
+  `?lang=tr|en` to collapse bilingual fields into one language.
 
-**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 14 tools over this API.
+**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 43 tools over this API.
 
 Free during beta, no API key. AI-generated research: may be wrong, not financial advice.
 """
@@ -81,19 +92,46 @@ async def report_dates():
     return {"dates": dates, "report_types": config.REPORT_TYPES}
 
 
+def _lang_param(lang: str | None) -> str | None:
+    if lang not in (None, "tr", "en"):
+        raise HTTPException(422, "lang must be tr or en")
+    return lang
+
+
+def _report_payload(date: str, type: str, data: dict, section: str | None,
+                    lang: str | None) -> dict:
+    data = localize(data, lang)
+    if section is None:
+        return {"date": date, "type": type, "report": data}
+    try:
+        sliced = slice_report(data if isinstance(data, dict) else {}, section)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"date": date, "type": type, "section": section, "report": sliced}
+
+
 @app.get("/v1/reports/latest")
-async def latest_report(type: str = Query(..., description="Report type")):
+async def latest_report(
+    type: str = Query(..., description="Report type"),
+    section: str | None = Query(None, description="Section key, or 'toc' for keys+titles only"),
+    lang: str | None = Query(None, description="tr | en — collapse bilingual fields"),
+):
     if type not in config.REPORT_TYPES:
         raise HTTPException(422, f"unknown report type; one of {config.REPORT_TYPES}")
     hit = await store.latest_report(_http(), type)
     if hit is None:
         raise HTTPException(404, f"no {type} report in the last {config.MAX_LOOKBACK_DAYS} days")
     date, data = hit
-    return {"date": date, "type": type, "report": data}
+    return _report_payload(date, type, data, section, _lang_param(lang))
 
 
 @app.get("/v1/reports/{date}/{type}")
-async def report_at(date: str, type: str):
+async def report_at(
+    date: str,
+    type: str,
+    section: str | None = Query(None, description="Section key, or 'toc'"),
+    lang: str | None = Query(None, description="tr | en"),
+):
     if not store.valid_date_folder(date):
         raise HTTPException(422, "date must be DD_MM_YYYY")
     if type not in config.REPORT_TYPES:
@@ -101,29 +139,29 @@ async def report_at(date: str, type: str):
     data = await store.fetch_report(_http(), date, type)
     if data is None:
         raise HTTPException(404, f"no {type} report on {date}")
-    return {"date": date, "type": type, "report": data}
+    return _report_payload(date, type, data, section, _lang_param(lang))
 
 
 # ---------- widgets ----------
 
 @app.get("/v1/widgets/{widget_id}")
-async def latest_widget(widget_id: str):
+async def latest_widget(widget_id: str, lang: str | None = Query(None, description="tr | en")):
     """Latest widget JSON by id (walks back up to 7 days)."""
     hit = await store.latest_widget(_http(), widget_id)
     if hit is None:
         raise HTTPException(404, f"widget {widget_id} not found in the last 7 days")
     date, data = hit
-    return {"date": date, "id": widget_id, "widget": data}
+    return {"date": date, "id": widget_id, "widget": localize(data, _lang_param(lang))}
 
 
 @app.get("/v1/widgets/{date}/{widget_id}")
-async def widget_at(date: str, widget_id: str):
+async def widget_at(date: str, widget_id: str, lang: str | None = Query(None)):
     if not store.valid_date_folder(date):
         raise HTTPException(422, "date must be DD_MM_YYYY")
     data = await store.fetch_widget(_http(), date, widget_id)
     if data is None:
         raise HTTPException(404, f"widget {widget_id} not found on {date}")
-    return {"date": date, "id": widget_id, "widget": data}
+    return {"date": date, "id": widget_id, "widget": localize(data, _lang_param(lang))}
 
 
 # ---------- research shortcuts ----------
@@ -139,24 +177,78 @@ async def earnings_radar():
 
 
 @app.get("/v1/research/stocks")
-async def stock_research(ticker: str | None = Query(None, description="Filter to one ticker")):
-    """Latest per-ticker research cards (score, thesis, catalysts, risks)."""
-    hit = await store.latest_report(_http(), "hood_stocks")
-    if hit is None:
-        raise HTTPException(404, "no stock research report in the archive window")
-    date, data = hit
-    cards = data.get("cards", []) if isinstance(data, dict) else []
+async def stock_research(
+    ticker: str | None = Query(None, description="One ticker → full research card"),
+    sector: str | None = Query(None, description="Manifest filter: sector substring"),
+    rating: str | None = Query(None, description="Manifest filter: strong_buy/buy/hold/avoid"),
+    limit: int = Query(50, ge=1, le=526),
+    sort: str = Query("score", description="Manifest sort: score | mcap_rank"),
+    lang: str | None = Query(None, description="tr | en"),
+):
+    """Top-500 daily research cards. With `ticker`: the full bilingual card
+    (score, thesis, catalysts, financials, competitors, news, key risk,
+    analyst target). Without: the manifest (ticker, name, sector, mcap rank,
+    score, rating, updated_at) with optional filters — never 500 full cards."""
+    lang = _lang_param(lang)
     if ticker:
-        t = ticker.upper()
-        cards = [c for c in cards if str(c.get("ticker", "")).upper() == t]
-        if not cards:
-            raise HTTPException(404, f"no research card for {t}")
+        card = await store.fetch_research_card(_http(), ticker)
+        if card is None:
+            raise HTTPException(404, f"no research card for {ticker.upper()}")
+        card = localize(card, lang)
+        return {"as_of": card.get("generated_at"), "card": card}
+
+    index = await store.fetch_research_index(_http())
+    if index is None:
+        raise HTTPException(404, "research cards index unavailable")
+    rows = index.get("tickers") or []
+    if sector:
+        s = sector.lower()
+        rows = [r for r in rows if s in str(r.get("sector", "")).lower()]
+    if rating:
+        rows = [r for r in rows if str(r.get("rating", "")) == rating]
+    if sort == "score":
+        rows = sorted(rows, key=lambda r: r.get("score") or 0, reverse=True)
+    else:
+        rows = sorted(rows, key=lambda r: (r.get("mcap_rank") is None, r.get("mcap_rank") or 0))
     return {
-        "date": date,
-        "as_of": data.get("as_of") if isinstance(data, dict) else None,
-        "macro_note": data.get("macro_note") if isinstance(data, dict) else None,
-        "cards": cards,
+        "as_of": index.get("as_of"),
+        "generated_at": index.get("generated_at"),
+        "total": len(rows),
+        "count": min(len(rows), limit),
+        "tickers": rows[:limit],
     }
+
+
+@app.get("/v1/macro/calendar")
+async def macro_calendar(
+    part: str = Query("upcoming", description="upcoming | analysis | events"),
+    limit: int = Query(20, ge=1, le=100),
+    lang: str | None = Query(None, description="tr | en"),
+):
+    """US macro calendar from the macro_chart widget — never returns the raw
+    3-year price bars. `upcoming`: next high-impact events + AI note.
+    `analysis`: 1m/3m/1y AI market commentary. `events`: recent past events
+    with actual-vs-forecast, newest first."""
+    hit = await store.latest_widget(_http(), "macro_chart")
+    if hit is None:
+        raise HTTPException(404, "macro_chart widget unavailable")
+    date, data = hit
+    data = localize(data, _lang_param(lang)) or {}
+    ai = data.get("ai_analysis") or {}
+    if part == "upcoming":
+        return {
+            "date": date,
+            "upcoming": ai.get("upcoming") or data.get("upcoming") or [],
+            "note": ai.get("upcoming_note") or ai.get("upcoming_note_tr")
+            or data.get("upcoming_note") or data.get("upcoming_note_tr"),
+        }
+    if part == "analysis":
+        return {"date": date, "horizons": ai.get("horizons") or ai, "generated_at": data.get("generated_at")}
+    if part == "events":
+        events = data.get("events") or []
+        events = sorted(events, key=lambda e: str(e.get("date") or ""), reverse=True)
+        return {"date": date, "count": min(len(events), limit), "events": events[:limit]}
+    raise HTTPException(422, "part must be upcoming | analysis | events")
 
 
 @app.get("/v1/market/regime")
@@ -299,6 +391,12 @@ async def status():
     }
     macro = await store.latest_report(client, "macro_overview")
     out["sources"]["macro_overview"] = {"date": macro[0] if macro else None, "ok": macro is not None}
+    research = await store.fetch_research_index(client)
+    out["sources"]["research_cards"] = {
+        "as_of": research.get("as_of") if research else None,
+        "count": research.get("count") if research else None,
+        "ok": research is not None,
+    }
     try:
         states = await store.rest_get(
             client,

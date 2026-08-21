@@ -8,7 +8,7 @@ for AI agents. Patterned after `otto-data`.
 ## Surface
 
 - **REST** `/v1/*` — see `/docs` (OpenAPI) on the running service
-- **MCP** `/mcp` — streamable HTTP, 12 read-only tools
+- **MCP** `/mcp` — streamable HTTP, 43 read-only tools (section+lang report access, top-500 research cards, metals, bulletin, macro calendar, signal track record)
 
 | Tool | What |
 |---|---|
@@ -41,7 +41,7 @@ uvicorn api.main:app --reload  # http://localhost:8000/docs, MCP at /mcp
 MCP client registration (hosted):
 
 ```json
-{ "mcpServers": { "alpha-data": { "url": "https://alpha-data-bgg3.onrender.com/mcp" } } }
+{ "mcpServers": { "alpha-data": { "url": "https://alpha-data.onrender.com/mcp" } } }
 ```
 
 Deploy: Render blueprint in `render.yaml` (single web service = API + MCP).
