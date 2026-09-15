@@ -40,7 +40,8 @@ mcp = FastMCP(
         "cross-report daily AI brief and a first-person analyst bulletin, "
         "daily deep-research reports (macro overview, NDX/SPY index bias, "
         "sector rotation, crypto, global daily pulse, SPX/NDX options profit "
-        "zones, AI-impact research, metals compass, earnings radar), live "
+        "zones, AI-impact research, metals compass, earnings radar, macro alpha "
+        "big-picture cards with a priced-in panel), live "
         "market widgets (rotation regime, momentum, options flow/analytics, "
         "metals dashboard, macro calendar, value screener, top picks, risk "
         "dashboard, signal track record), AI-impact trackers, Reddit alpha "
@@ -117,7 +118,8 @@ async def get_report(type: str = "macro_overview", date: Optional[str] = None,
     full report. lang: 'tr' (default) or 'en'. Daily types: macro_overview,
     nx_spy_bias (NDX/SPY index bias), hood_stocks, sector_rotation, crypto,
     daily_pulse (global markets brief), tree_report (crypto news),
-    sp_ndx_profit_zones (options levels). Gated types: stock + unified_stocks
+    sp_ndx_profit_zones (options levels), macro_alpha (big-picture alpha
+    cards + priced-in panel; see the macro_alpha tool). Gated types: stock + unified_stocks
     (Mon/Thu), ai_impacts + metals (Mon/Wed/Fri), earnings_radar (Mon).
     Archive-only: forex."""
     params = {"section": section, "lang": lang}
@@ -441,6 +443,59 @@ async def profit_zones(part: Optional[str] = None, lang: str = "tr") -> dict:
         "headline": report.get("headline"),
         "summary": (summary or {}).get("report"),
         "parts": (report.get("extra_keys") or []) + [s.get("key") for s in report.get("sections") or []],
+    }
+
+
+@mcp.tool(annotations=_ro("Macro Alpha"))
+async def macro_alpha(part: Optional[str] = None, date: Optional[str] = None,
+                      lang: str = "tr") -> dict:
+    """Makro Alfa: the daily big-picture alpha page. Persistent-id alpha cards
+    (narrative -> winners/losers, regime observation + historical analogs,
+    consensus vs contrarian, second-order effects, sentiment regime), a
+    "priced in?" panel (options structure, rates curve, event reaction,
+    positioning, sentiment: machine score + analyst verdict per module), a
+    scoreboard and the day's closed cards. Omit part for a compact index
+    (headline, summary, priced-in verdicts, scoreboard, card index); pass one
+    of kartlar, fiyatlama_paneli, rejim, konsensus_vs_karsi_tez,
+    ikinci_derece_etkiler, duygu, kapananlar, diger_alfa, skorbord,
+    veri_saglik, gun_ici for that block in full. date DD_MM_YYYY optional
+    (latest when omitted). lang tr | en."""
+    if date:
+        path, base = f"/v1/reports/{date}/macro_alpha", {"lang": lang}
+    else:
+        path, base = "/v1/reports/latest", {"type": "macro_alpha", "lang": lang}
+    if part:
+        return await _get(path, {**base, "section": part})
+    full = await _get(path, base)
+    r = full.get("report", {}) or {}
+    fp = r.get("fiyatlama_paneli") or {}
+    cards = r.get("kartlar") or []
+    return {
+        "date": full.get("date"),
+        "baslik": r.get("baslik"),
+        "ozet": r.get("ozet"),
+        "fiyatlama": {
+            "olay": fp.get("olay"),
+            "olay_tarihi": fp.get("olay_tarihi"),
+            "toplam_hukum": fp.get("toplam_hukum"),
+            "moduller": [
+                {"modul": m.get("modul"), "hukum": m.get("hukum"),
+                 "makine_skoru": m.get("makine_skoru_0to100")}
+                for m in (fp.get("moduller") or []) if isinstance(m, dict)
+            ],
+        },
+        "skorbord": r.get("skorbord"),
+        "gun_ici_olcum": (r.get("gun_ici") or {}).get("olculdu_at") if isinstance(r.get("gun_ici"), dict) else None,
+        "kart_indeksi": [
+            {"id": c.get("id"), "tur": c.get("tur"), "baslik": c.get("baslik"), "durum": c.get("durum"),
+             "gun_sayisi": c.get("gun_sayisi"), "pricing_status": c.get("pricing_status"),
+             "kanaat": c.get("kanaat"), "makine_durum": (c.get("olcum") or {}).get("makine_durum"),
+             "sepet_sinyali": (c.get("olcum") or {}).get("sepet_sinyali")}
+            for c in cards if isinstance(c, dict)
+        ],
+        "kapanan_sayisi": len(r.get("kapananlar") or []),
+        "parts": ["kartlar", "fiyatlama_paneli", "rejim", "konsensus_vs_karsi_tez", "ikinci_derece_etkiler",
+                  "duygu", "kapananlar", "diger_alfa", "skorbord", "veri_saglik", "gun_ici"],
     }
 
 

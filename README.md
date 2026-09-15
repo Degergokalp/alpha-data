@@ -8,7 +8,7 @@ for AI agents. Patterned after `otto-data`.
 ## Surface
 
 - **REST** `/v1/*` — see `/docs` (OpenAPI) on the running service
-- **MCP** `/mcp` — streamable HTTP, 43 read-only tools (section+lang report access, top-500 research cards, metals, bulletin, macro calendar, signal track record)
+- **MCP** `/mcp` — streamable HTTP, 44 read-only tools (section+lang report access, top-500 research cards, metals, bulletin, macro calendar, signal track record)
 
 | Tool | What |
 |---|---|
@@ -16,6 +16,7 @@ for AI agents. Patterned after `otto-data`.
 | `latest_report` / `get_report` | Deep-research report JSONs (latest or by date) |
 | `get_widget` | Any widget JSON (latest or by date) |
 | `earnings_radar` | Weekly earnings risk: beat probabilities, implied moves |
+| `macro_alpha` | Makro Alfa: big-picture alpha cards (narratives, regime, consensus vs contrarian, second-order) + priced-in panel; `part=` for one block |
 | `stock_research` | Per-ticker research card: score, thesis, catalysts |
 | `market_regime` | Live sector rotation regime + 11-sector board |
 | `momentum_movers` | Top 7d gainers/losers |
