@@ -38,7 +38,8 @@ Machine-readable US market research for AI agents, from **Alphalyze**.
   market cap, refreshed daily (`/v1/research/stocks`, `ticker=` for one card).
 - **Reports**: daily deep-research reports (macro overview, NDX/SPY bias,
   sector rotation, crypto, global daily pulse, SPX/NDX profit zones, AI
-  impacts, metals compass, weekly earnings radar), archived by date; fetch a
+  impacts, metals compass, weekly earnings radar, macro alpha big-picture
+  cards with a priced-in panel), archived by date; fetch a
   single section with `?section=` ("toc" lists section keys first).
 - **Widgets**: live structured snapshots — daily analyst bulletin, sector
   rotation regime, momentum screener, options flow, IV-vs-RV analytics,
@@ -49,7 +50,7 @@ Machine-readable US market research for AI agents, from **Alphalyze**.
 - **Language**: research text is Turkish-first with English translations; pass
   `?lang=tr|en` to collapse bilingual fields into one language.
 
-**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 43 tools over this API.
+**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 44 tools over this API.
 
 Free during beta, no API key. AI-generated research: may be wrong, not financial advice.
 """
@@ -330,7 +331,7 @@ async def social_signals(
     )
     if ticker:
         contains = urllib.parse.quote(json.dumps([ticker.upper()]))
-        q += f"&tickers=cs={contains}"
+        q += f"&tickers=cs.{contains}"
     rows = await store.rest_get(_http(), q)
     return {"count": len(rows), "signals": rows}
 
@@ -359,7 +360,7 @@ async def social_narratives(
     )
     if ticker:
         contains = urllib.parse.quote(json.dumps([ticker.upper()]))
-        q += f"&tickers_mentioned=cs={contains}"
+        q += f"&tickers_mentioned=cs.{contains}"
     rows = await store.rest_get(_http(), q)
     return {"count": len(rows), "events": rows}
 

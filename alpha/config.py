@@ -35,6 +35,7 @@ REPORT_TYPES = [
     "metals",
     "tree_report",
     "sp_ndx_profit_zones",
+    "macro_alpha",
 ]
 
 WIDGET_IDS = [
