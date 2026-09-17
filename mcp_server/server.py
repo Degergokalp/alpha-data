@@ -40,12 +40,12 @@ mcp = FastMCP(
         "cross-report daily AI brief and a first-person analyst bulletin, "
         "daily deep-research reports (macro overview, NDX/SPY index bias, "
         "sector rotation, crypto, global daily pulse, SPX/NDX options profit "
-        "zones, AI-impact research, metals compass, earnings radar, macro alpha "
+        "zones, AI-impact research, metals compass, earnings radar, macro alpha, niche map "
         "big-picture cards with a priced-in panel), live "
         "market widgets (rotation regime, momentum, options flow/analytics, "
         "metals dashboard, macro calendar, value screener, top picks, risk "
         "dashboard, signal track record), AI-impact trackers, Reddit alpha "
-        "signals and curated news. Conventions: research text is written in "
+        "signals, niche leadership and valuation cards, and curated news. Conventions: research text is written in "
         "Turkish and translated to English — pass lang='en' for English, the "
         "default lang='tr' returns Turkish; both collapse bilingual fields to "
         "one language. Large reports: call get_report with section='toc' "
@@ -241,6 +241,60 @@ async def stock_signals(signal: Optional[str] = None, ticker: Optional[str] = No
     return await _get("/v1/signals/stocks", params or None)
 
 
+@mcp.tool(annotations=_ro("Niche Map"))
+async def niche_map(theme: Optional[str] = None, structure: Optional[str] = None,
+                    niche_id: Optional[str] = None, limit: int = 40, lang: str = "tr") -> dict:
+    """Nis Haritasi: every niche/sub-theme (AI infra > ASIC, data-center cooling,
+    optics, payments...) with ranked players, sourced market share, structure
+    label (monopol/duopol/oligopol/parcali), CR3 and moat score. Omit niche_id
+    for a COMPACT index (id, name, theme, structure, cr3, top-3 players); pass
+    niche_id for one niche in full (players, leader thesis, risks, sources).
+    Filters: theme (substring on ust_tema), structure (exact). lang tr|en."""
+    if niche_id:
+        return await _get("/v1/niche/map", {"nis_id": niche_id, "lang": lang})
+    params = {"limit": min(max(1, limit), 200), "lang": lang}
+    if theme:
+        params["tema"] = theme
+    if structure:
+        params["yapi"] = structure
+    data = await _get("/v1/niche/map", params)
+    out = []
+    for n in data.get("nisler") or []:
+        players = n.get("oyuncular") or []
+        out.append({
+            "id": n.get("id"), "ad": n.get("ad") or n.get("ad_tr"), "ust_tema": n.get("ust_tema"),
+            "yapi": n.get("yapi"), "yapi_makine": n.get("yapi_makine"), "cr3_pct": n.get("cr3_pct"),
+            "oyuncu_sayisi": len(players),
+            "lider": [{"ticker": p.get("ticker"), "sirket_adi": p.get("sirket_adi"), "pazar_payi_pct": p.get("pazar_payi_pct"),
+                       "hendek_skoru_0to100": p.get("hendek_skoru_0to100")} for p in players[:3]],
+        })
+    return {"as_of": data.get("as_of"), "hafta_etiketi": data.get("hafta_etiketi"), "total": data.get("total"),
+            "count": len(out), "nisler": out}
+
+
+@mcp.tool(annotations=_ro("Niche Valuation Card"))
+async def niche_card(ticker: Optional[str] = None, niche_id: Optional[str] = None,
+                     zone: Optional[str] = None, status: Optional[str] = None,
+                     sort: str = "giris_mesafe", limit: int = 30, lang: str = "tr") -> dict:
+    """Per-ticker niche card: rank and share inside its niche, moat types/score,
+    machine valuation inputs, 3-level entry band (ucuz/makul/pahali with
+    rationale, margin of safety), long-term thesis, counter-thesis, conviction
+    and the invalidation condition measured daily (durum acik/yasiyor/gecersiz/
+    elle, price zone, distance to entry, days tracked). Pass ticker for one
+    FULL card; omit for the manifest with zone (ucuz|makul|pahali|asiri), status
+    and niche_id filters. sort: giris_mesafe | hendek | pay | sira. limit max 600."""
+    if ticker:
+        return await _get("/v1/niche/cards", {"ticker": ticker.upper(), "lang": lang})
+    params = {"limit": min(max(1, limit), 600), "sort": sort, "lang": lang}
+    if niche_id:
+        params["nis_id"] = niche_id
+    if zone:
+        params["bolge"] = zone
+    if status:
+        params["durum"] = status
+    return await _get("/v1/niche/cards", params)
+
+
 @mcp.tool(annotations=_ro("Ticker Snapshot"))
 async def ticker_snapshot(ticker: str, lang: str = "tr") -> dict:
     """Everything Alphalyze knows about one ticker in a single call: the
@@ -250,6 +304,7 @@ async def ticker_snapshot(ticker: str, lang: str = "tr") -> dict:
     null when the ticker is outside that dataset's universe."""
     t = ticker.upper()
     research = await _try(_get("/v1/research/stocks", {"ticker": t, "lang": lang}))
+    niche = await _try(_get("/v1/niche/cards", {"ticker": t, "lang": lang}))
     signal = await _try(_get("/v1/signals/stocks", {"ticker": t}))
     reddit = await _try(_get("/v1/social/signals", {"ticker": t, "limit": 5}))
     momentum = await _try(_get("/v1/market/momentum", {"limit": 50}))
@@ -281,6 +336,7 @@ async def ticker_snapshot(ticker: str, lang: str = "tr") -> dict:
     return {
         "ticker": t,
         "research_card": (research or {}).get("card") if research else None,
+        "niche_card": (niche or {}).get("card") if niche else None,
         "ai_signal": (signal or {}).get("stocks", [None])[0] if signal else None,
         "momentum_7d": mom_entry,
         "options_flow": flow_entry,

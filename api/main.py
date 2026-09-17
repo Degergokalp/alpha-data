@@ -45,12 +45,15 @@ Machine-readable US market research for AI agents, from **Alphalyze**.
   rotation regime, momentum screener, options flow, IV-vs-RV analytics,
   metals dashboard, macro calendar, value screener, top picks, risk
   dashboard, AI impact trackers, signal track record.
+- **Niche map**: every niche with ranked players, market share, structure and moat;
+  per-ticker valuation bands and machine-measured long-term theses (`/v1/niche/map`,
+  `/v1/niche/cards`).
 - **Social**: Reddit alpha signal feed, narrative events, extracted market state.
 - **News**: curated market news with sentiment and impact tags.
 - **Language**: research text is Turkish-first with English translations; pass
   `?lang=tr|en` to collapse bilingual fields into one language.
 
-**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 44 tools over this API.
+**MCP**: point any MCP client at `/mcp` (streamable HTTP) for 46 tools over this API.
 
 Free during beta, no API key. AI-generated research: may be wrong, not financial advice.
 """
@@ -141,6 +144,97 @@ async def report_at(
     if data is None:
         raise HTTPException(404, f"no {type} report on {date}")
     return _report_payload(date, type, data, section, _lang_param(lang))
+
+
+# ---------- niche map (Nis Haritasi) ----------
+
+_NIS_YAPI = ("monopol", "duopol", "oligopol", "parcali")
+_NIS_BOLGE = ("ucuz", "makul", "pahali", "asiri")
+_NIS_DURUM = ("acik", "yasiyor", "gecersiz", "elle")
+_NIS_SORT = ("giris_mesafe", "hendek", "pay", "sira")
+
+
+@app.get("/v1/niche/map")
+async def niche_map(
+    tema: str | None = Query(None, description="ust_tema substring filter (case-insensitive)"),
+    yapi: str | None = Query(None, description="monopol | duopol | oligopol | parcali"),
+    nis_id: str | None = Query(None, description="One niche in full by id"),
+    limit: int = Query(50, ge=1, le=200),
+    lang: str | None = Query(None, description="tr | en — collapse bilingual fields"),
+):
+    """Nis Haritasi: every niche with ranked players, market share (sourced), structure label,
+    CR3 and moat score. Bilingual `_tr/_en` fields; `lang` collapses them."""
+    if yapi is not None and yapi not in _NIS_YAPI:
+        raise HTTPException(422, f"yapi must be one of {_NIS_YAPI}")
+    lang_v = _lang_param(lang)
+    data = await store.fetch_nis_harita(_http())
+    if data is None:
+        raise HTTPException(404, "niche map unavailable")
+    data = localize(data, lang_v)
+    nisler = data.get("nisler") or []
+    if nis_id:
+        hit = next((n for n in nisler if n.get("id") == nis_id), None)
+        if hit is None:
+            raise HTTPException(404, f"unknown nis_id; known: {[n.get('id') for n in nisler][:60]}")
+        return {"as_of": data.get("as_of"), "nis": hit}
+    if tema:
+        needle = tema.lower()
+        nisler = [n for n in nisler if needle in str(n.get("ust_tema") or "").lower()]
+    if yapi:
+        nisler = [n for n in nisler if n.get("yapi") == yapi]
+    return {
+        "as_of": data.get("as_of"), "generated_at": data.get("generated_at"),
+        "hafta_etiketi": data.get("hafta_etiketi"), "gruplar": data.get("gruplar"),
+        "istatistik": data.get("istatistik"), "total": len(nisler), "count": min(limit, len(nisler)),
+        "nisler": nisler[:limit],
+    }
+
+
+@app.get("/v1/niche/cards")
+async def niche_cards(
+    ticker: str | None = Query(None, description="One full card by ticker"),
+    nis_id: str | None = Query(None),
+    bolge: str | None = Query(None, description="ucuz | makul | pahali | asiri"),
+    durum: str | None = Query(None, description="acik | yasiyor | gecersiz | elle (machine thesis state)"),
+    sort: str = Query("giris_mesafe", description="giris_mesafe | hendek | pay | sira"),
+    limit: int = Query(50, ge=1, le=600),
+    lang: str | None = Query(None, description="tr | en"),
+):
+    """Per-ticker niche valuation card (rank/share/moat, machine inputs, 3-level entry band,
+    long-term thesis, invalidation measured daily). Without `ticker`: the manifest with filters."""
+    lang_v = _lang_param(lang)
+    if ticker:
+        card = await store.fetch_nis_kart(_http(), ticker)
+        if card is None:
+            raise HTTPException(404, f"no niche card for {ticker.upper()}")
+        return {"as_of": card.get("as_of") or card.get("generated_at"), "card": localize(card, lang_v)}
+    if bolge is not None and bolge not in _NIS_BOLGE:
+        raise HTTPException(422, f"bolge must be one of {_NIS_BOLGE}")
+    if durum is not None and durum not in _NIS_DURUM:
+        raise HTTPException(422, f"durum must be one of {_NIS_DURUM}")
+    if sort not in _NIS_SORT:
+        raise HTTPException(422, f"sort must be one of {_NIS_SORT}")
+    idx = await store.fetch_nis_index(_http())
+    if idx is None:
+        raise HTTPException(404, "niche index unavailable")
+    rows = list(idx.get("kartlar") or [])
+    if nis_id:
+        rows = [r for r in rows if r.get("nis_id") == nis_id or any(n.get("nis_id") == nis_id for n in (r.get("nisler") or []))]
+    if bolge:
+        rows = [r for r in rows if r.get("bolge") == bolge]
+    if durum:
+        rows = [r for r in rows if r.get("makine_durum") == durum]
+    if sort == "giris_mesafe":
+        rows.sort(key=lambda r: (r.get("giris_mesafe_pct") is None, r.get("giris_mesafe_pct") or 0))
+    elif sort == "hendek":
+        rows.sort(key=lambda r: -(r.get("hendek_skoru_0to100") or 0))
+    elif sort == "pay":
+        rows.sort(key=lambda r: (r.get("pazar_payi_pct") is None, -(r.get("pazar_payi_pct") or 0)))
+    else:
+        rows.sort(key=lambda r: (r.get("sira") is None, r.get("sira") or 99))
+    rows = [localize(r, lang_v) for r in rows[:limit]]
+    return {"as_of": idx.get("as_of"), "generated_at": idx.get("generated_at"), "total": idx.get("count"),
+            "count": len(rows), "kartlar": rows}
 
 
 # ---------- widgets ----------
@@ -397,6 +491,13 @@ async def status():
         "as_of": research.get("as_of") if research else None,
         "count": research.get("count") if research else None,
         "ok": research is not None,
+    }
+    nis = await store.fetch_nis_index(client)
+    out["sources"]["niche_map"] = {
+        "as_of": nis.get("as_of") if nis else None,
+        "count": nis.get("count") if nis else None,
+        "available": nis is not None,
+        "ok": True,  # yeni veri seti; dosya olusana kadar servisi degraded yapmasin
     }
     try:
         states = await store.rest_get(

@@ -144,6 +144,21 @@ async def fetch_research_card(client: httpx.AsyncClient, ticker: str) -> Any | N
     return await _download_json(client, f"research_cards/{ticker.upper()}.json")
 
 
+async def fetch_nis_harita(client: httpx.AsyncClient) -> Any | None:
+    """Nis Haritasi: all niches with ranked players, structure and moat (stable path, weekly)."""
+    return await _download_json(client, "nis/harita.json")
+
+
+async def fetch_nis_index(client: httpx.AsyncClient) -> Any | None:
+    """Niche card manifest, one row per public player (stable path, refreshed daily)."""
+    return await _download_json(client, "nis/index.json")
+
+
+async def fetch_nis_kart(client: httpx.AsyncClient, ticker: str) -> Any | None:
+    """One bilingual niche card: valuation table, thesis, invalidation, daily measurement."""
+    return await _download_json(client, f"nis/kartlar/{ticker.upper()}.json")
+
+
 async def available_dates(client: httpx.AsyncClient, max_back: Optional[int] = None) -> list[str]:
     """Dates (newest first) that have at least one known report."""
     cached = _cache_get("dates")
