@@ -196,7 +196,7 @@ async def niche_cards(
     nis_id: str | None = Query(None),
     bolge: str | None = Query(None, description="ucuz | makul | pahali | asiri"),
     durum: str | None = Query(None, description="acik | yasiyor | gecersiz | elle (machine thesis state)"),
-    sort: str = Query("giris_mesafe", description="giris_mesafe | hendek | pay | sira"),
+    sort: str = Query("giris_mesafe", description="giris_mesafe (ucuz seviyeye gore firsat, azalan) | hendek | pay | sira"),
     limit: int = Query(50, ge=1, le=600),
     lang: str | None = Query(None, description="tr | en"),
 ):
@@ -225,7 +225,8 @@ async def niche_cards(
     if durum:
         rows = [r for r in rows if r.get("makine_durum") == durum]
     if sort == "giris_mesafe":
-        rows.sort(key=lambda r: (r.get("giris_mesafe_pct") is None, r.get("giris_mesafe_pct") or 0))
+        # (ucuz - spot) / spot: buyuk deger = spot ucuz seviyenin altinda, firsat once
+        rows.sort(key=lambda r: (r.get("giris_mesafe_pct") is None, -(r.get("giris_mesafe_pct") or 0)))
     elif sort == "hendek":
         rows.sort(key=lambda r: -(r.get("hendek_skoru_0to100") or 0))
     elif sort == "pay":
